@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Enterprise AI Knowledge Assistant</title>
+<style>
+  :root { --ink:#1a1a2e; --accent:#5b5bd6; --bg:#f7f7fb; --card:#fff; --border:#e3e3ee; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--ink); margin:0; padding:2rem; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: .25rem; }
+  p.sub { color:#666; margin-top:0; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1.25rem; margin-bottom:1.25rem; }
+  input[type=file], textarea { width:100%; padding:.6rem; border:1px solid var(--border); border-radius:8px; font-family:inherit; }
+  textarea { resize:vertical; min-height:70px; }
+  button { background:var(--accent); color:#fff; border:none; padding:.6rem 1.1rem; border-radius:8px; cursor:pointer; font-weight:600; margin-top:.6rem; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .answer { white-space:pre-wrap; line-height:1.5; }
+  .sources { margin-top:.75rem; font-size:.85rem; color:#555; }
+  .badge { display:inline-block; background:#eee; border-radius:6px; padding:.15rem .5rem; margin:.15rem .25rem 0 0; }
+  .status { font-size:.85rem; color:#888; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📚 Enterprise AI Knowledge Assistant</h1>
+  <p class="sub">Upload documents, then ask questions grounded in them.</p>
+
+  <div class="card">
+    <strong>1. Ingest a document</strong>
+    <div><input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md" /></div>
+    <button onclick="ingest()">Upload & Index</button>
+    <div class="status" id="ingestStatus"></div>
+  </div>
+
+  <div class="card">
+    <strong>2. Ask a question</strong>
+    <textarea id="question" placeholder="e.g. What is our remote work policy?"></textarea>
+    <button onclick="ask()">Ask</button>
+    <div class="status" id="queryStatus"></div>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none;">
+    <strong>Answer</strong>
+    <div class="answer" id="answer"></div>
+    <div class="sources" id="sources"></div>
+  </div>
+</div>
+
+<script>
+async function ingest() {
+  const f = document.getElementById('fileInput').files[0];
+  const status = document.getElementById('ingestStatus');
+  if (!f) { status.textContent = "Pick a file first."; return; }
+  status.textContent = "Uploading & indexing...";
+  const fd = new FormData();
+  fd.append('file', f);
+  try {
+    const res = await fetch('/api/ingest', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Upload failed');
+    status.textContent = `Indexed ${data.chunks_indexed} chunks from ${data.filename}. Total chunks in store: ${data.total_chunks_in_store}.`;
+  } catch (e) {
+    status.textContent = "Error: " + e.message;
+  }
+}
+
+async function ask() {
+  const q = document.getElementById('question').value.trim();
+  const status = document.getElementById('queryStatus');
+  if (!q) { status.textContent = "Type a question first."; return; }
+  status.textContent = "Thinking...";
+  try {
+    const res = await fetch('/api/query', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ question: q })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Query failed');
+    status.textContent = "";
+    document.getElementById('resultCard').style.display = 'block';
+    document.getElementById('answer').textContent = data.answer;
+    document.getElementById('sources').innerHTML = data.sources.length
+      ? "Sources: " + data.sources.map(s => `<span class="badge">${s.source} p.${s.page}</span>`).join('')
+      : "No sources retrieved.";
+  } catch (e) {
+    status.textContent = "Error: " + e.message;
+  }
+}
+</script>
+</body>
+</html>
